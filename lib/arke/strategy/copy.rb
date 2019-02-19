@@ -10,16 +10,30 @@ module Arke::Strategy
       @orderbook = Arke::Orderbook.new(@pair)
     end
 
-    def on_order_create(order)
+    # Strategy will controll all orders with callbacks
+    def create_order(order)
       @orderbook.add(order)
     end
 
-    def on_order_stop(order)
+    def stop_order(order)
       @orderbook.remove(order.id)
     end
 
+    # Copy strategy will route all orders to orderbook
+    # orderbook willl care about organizing orders into single queue
+    # Strategy will register callbacks to connect orderbook with target
+    def on_order_stop(order)
+    end
+
+    def on_order_create(order)
+      @target_exchange.create_order(order)
+    end
+
     def start
-      target_exchange = @target['driver'].new(self)
+      @orderbook.register(:create, method(:on_order_create))
+      @orderbook.register(:stop, method(:on_order_stop))
+
+      @target_exchange = @target['driver'].new(self)
 
       EM.run do
         Arke::Configuration.get(:sources).each do |source|
@@ -29,19 +43,19 @@ module Arke::Strategy
           end
         end
 
-        process_orders = proc do |order|
-          if @orderbook.nil? || @orderbook.empty? || order.nil?
-            EM.add_timer(1) { @orderbook.orders_queue.pop(&process_orders) }
-          else
-            Arke::Log.info("Order: #{order}")
-            sleep(0.5)
-            target_exchange.create_order(order)
-            @orderbook.remove(order.id)
-            EM.next_tick { @orderbook.orders_queue.pop(&process_orders) }
-          end
-        end
+        # process_orders = proc do |order|
+        #   if @orderbook.nil? || @orderbook.empty? || order.nil?
+        #     EM.add_timer(1) { @orderbook.orders_queue.pop(&process_orders) }
+        #   else
+        #     Arke::Log.info("Order: #{order}")
+        #     sleep(0.5)
+        #     target_exchange.create_order(order)
+        #     @orderbook.remove(order.id)
+        #     EM.next_tick { @orderbook.orders_queue.pop(&process_orders) }
+        #   end
+        # end
 
-        EM.add_timer(3) { @orderbook.orders_queue.pop(&process_orders) }
+        # EM.add_timer(3) { @orderbook.orders_queue.pop(&process_orders) }
 
         trap('INT') { EM.stop }
         trap('TERM') { EM.stop }

@@ -6,6 +6,7 @@ require_relative 'price_level'
 
 module Arke
   class Orderbook
+    UnsupportedEvent = Class.new(StandardError)
 
     def initialize(market)
       @market = market
@@ -15,6 +16,16 @@ module Arke
         sell: ::RBTree.new,
         buy: ::RBTree.new
       }
+      @callbacks = {
+        stop: [],
+        create: []
+      }
+    end
+
+    def register(event, callback)
+      raise UnsupportedEvent.new(event) unless @callbacks[event]
+
+      @callbacks[event].push(callback)
     end
 
     def empty?
@@ -30,6 +41,8 @@ module Arke
       side = @book[order.side]
       side[order.price] ||= PriceLevel.new(order.price)
       side[order.price].add order
+
+      @callbacks[:create].each { |c| c.call(order) }
     end
 
     def remove(id)
@@ -38,6 +51,8 @@ module Arke
 
       @book[order.side][order.price].remove(order)
       @orders.delete(id)
+
+      @callbacks[:stop].each { |c| c.call(order) }
     end
 
     def find(id)

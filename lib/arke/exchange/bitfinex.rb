@@ -41,9 +41,9 @@ module Arke::Exchange
       order = Arke::Order.new(id, @strategy.pair, price, amount)
 
       if price.zero?
-        @strategy.on_order_stop(order)
+        @strategy.stop_order(order)
       else
-        @strategy.on_order_create(order)
+        @strategy.create_order(order)
       end
     end
 
